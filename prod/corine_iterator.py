@@ -1,7 +1,15 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import arcpy, os, time, traceback
+import arcpy, os, time, traceback, gc
 from dataclasses import dataclass
+
+# Try to import psutil for memory monitoring
+try:
+    import psutil
+
+    HAS_PSUTIL = True
+except ImportError:
+    HAS_PSUTIL = False
 
 
 # -------------------- Logger (GP-pane friendly) --------------------
@@ -54,6 +62,62 @@ class Logger:
 
     def error(self, msg: str):
         Logger._gp_err(msg)
+
+
+# -------------------- Memory Tracker --------------------
+class MemoryTracker:
+    def __init__(self, logger):
+        self.log = logger
+        self.start_memory = None
+        self.peak_memory = 0
+        self.has_psutil = HAS_PSUTIL
+
+        if self.has_psutil:
+            self.process = psutil.Process()
+            self.start_memory = self.process.memory_info().rss / 1024 / 1024  # MB
+            self.system_total = psutil.virtual_memory().total / 1024 / 1024 / 1024  # GB
+            self.log.msg(f"System Memory", f"{self.system_total:.1f} GB total")
+
+    def report(self, stage: str, poly_count: int = None):
+        if not self.has_psutil:
+            return
+
+        # Force garbage collection before measuring
+        gc.collect()
+
+        mem_info = self.process.memory_info()
+        current_mb = mem_info.rss / 1024 / 1024
+        self.peak_memory = max(self.peak_memory, current_mb)
+
+        system_mem = psutil.virtual_memory()
+        percent = system_mem.percent
+        available_gb = system_mem.available / 1024 / 1024 / 1024
+
+        msg = f"{stage}: {current_mb:.0f} MB used ({percent:.1f}% system), {available_gb:.1f} GB available"
+
+        if poly_count:
+            mb_per_1k = current_mb / (poly_count / 1000)
+            msg += f" [{mb_per_1k:.1f} MB per 1K polys]"
+
+            # Estimate maximum polygons based on available memory
+            safe_memory_gb = min(32, self.system_total * 0.7)  # Use max 70% of system or 32GB
+            estimated_max_polys = int((safe_memory_gb * 1024) / mb_per_1k * 1000)
+            msg += f" [Est. max: {estimated_max_polys:,} polys]"
+
+        self.log.iter(f"Memory - {msg}")
+
+        # Warning if getting high
+        if percent > 80:
+            self.log.warn(f"High memory usage: {percent:.1f}%")
+
+    def final_report(self):
+        if not self.has_psutil:
+            return
+
+        self.log.msg("Memory Summary:")
+        self.log.iter(f"Peak usage: {self.peak_memory:.0f} MB")
+        if self.start_memory:
+            self.log.iter(f"Total consumed: {self.peak_memory - self.start_memory:.0f} MB")
 
 
 # -------------------- Config --------------------
@@ -110,6 +174,9 @@ class CorineGeneralizer:
     # ---------- Public ----------
     def run(self) -> str:
         t0 = time.time()
+        memory_tracker = MemoryTracker(self.log)
+        memory_tracker.report("Start")
+
         try:
             setup = self.log.line("Setup")
             self._validate_inputs();
@@ -119,16 +186,28 @@ class CorineGeneralizer:
             self._cleanup(False);
             setup.add("Cleanup remnants")
             setup.done()
+            memory_tracker.report("After setup")
 
             prep = self.log.line("Preparations")
-            self._prepare(prep_line=prep);
+            self._prepare(prep_line=prep, memory_tracker=memory_tracker)
             prep.done()
+            memory_tracker.report("After preparations")
+
+            # Count initial polygons
+            initial_count = int(arcpy.management.GetCount(self.cfg.out_general)[0])
+            self.log.msg(f"Initial polygon count: {initial_count}")
+            memory_tracker.report("Before iterator", initial_count)
 
             self.log.msg("Iterator", "running")
-            self._run_iterator()
+            self._run_iterator(memory_tracker=memory_tracker)
 
             self.log.msg("Annotate", "final labels")
             self.annotate()
+
+            # Final count
+            final_count = int(arcpy.management.GetCount(self.cfg.out_general)[0])
+            self.log.msg(f"Final polygon count: {final_count}")
+            memory_tracker.report("After processing", final_count)
 
             if not self.cfg.keep_intermediates:
                 final = self.log.line("Finalization")
@@ -136,7 +215,9 @@ class CorineGeneralizer:
                 final.add(f"cleanup layers ({ld})")
                 final.add(f"cleanup files ({fd})")
                 final.done()
+                memory_tracker.report("After cleanup")
 
+            memory_tracker.final_report()
             Logger._gp_msg(f"Result feature class: {self.cfg.out_general} - Done [{time.time() - t0:.2f}s]")
             return self.cfg.out_general
 
@@ -220,7 +301,7 @@ class CorineGeneralizer:
         return ld, fd
 
     # ---------- Preparation ----------
-    def _prepare(self, prep_line: Logger.Line | None = None):
+    def _prepare(self, prep_line: Logger.Line | None = None, memory_tracker=None):
         # Change
         arcpy.management.CopyFeatures(self.cfg.input_change, self.change_copy)
         if "NEWCODE" not in [f.name for f in arcpy.ListFields(self.change_copy)]:
@@ -239,15 +320,19 @@ class CorineGeneralizer:
         )
         if prep_line: prep_line.add("Revision database")
 
-        # Union (change + revision dissolves)
-        arcpy.management.Dissolve(self.change_copy, self.diss_c, ["NEWCODE"], "", "SINGLE_PART", "DISSOLVE_LINES")
-        arcpy.management.Dissolve(self.revision_copy, self.diss_r, ["OLDCODE"], "", "SINGLE_PART", "DISSOLVE_LINES")
-
-        # Try PairwiseUnion for better performance
+        # Dissolve change and revision - try PairwiseDissolve for better performance
         try:
-            arcpy.analysis.PairwiseUnion([self.diss_r, self.diss_c], self.union_cr)
+            arcpy.analysis.PairwiseDissolve(self.change_copy, self.diss_c, "NEWCODE", None, "SINGLE_PART")
         except:
-            arcpy.analysis.Union([[self.diss_r, ""], [self.diss_c, ""]], self.union_cr, "NO_FID", "", "GAPS")
+            arcpy.management.Dissolve(self.change_copy, self.diss_c, ["NEWCODE"], "", "SINGLE_PART", "DISSOLVE_LINES")
+
+        try:
+            arcpy.analysis.PairwiseDissolve(self.revision_copy, self.diss_r, "OLDCODE", None, "SINGLE_PART")
+        except:
+            arcpy.management.Dissolve(self.revision_copy, self.diss_r, ["OLDCODE"], "", "SINGLE_PART", "DISSOLVE_LINES")
+
+        # Union (no PairwiseUnion exists, use regular Union)
+        arcpy.analysis.Union([[self.diss_r, ""], [self.diss_c, ""]], self.union_cr, "NO_FID", "", "GAPS")
 
         if prep_line: prep_line.add("Union")
 
@@ -285,7 +370,7 @@ class CorineGeneralizer:
         self._ensure_gid_area(self.cfg.out_general, force_area=True)
 
     # ---------- ITERATOR ----------
-    def _run_iterator(self):
+    def _run_iterator(self, memory_tracker=None):
         # Priority map with STRING key
         code_f = self._resolve_field_name(self.cfg.priority_table, self.cfg.priority_code_field)
         pri_f = self._resolve_field_name(self.cfg.priority_table, self.cfg.priority_pri_field)
@@ -326,6 +411,10 @@ class CorineGeneralizer:
         step = int(self.cfg.by_value) if int(self.cfg.by_value) != 0 else 5
 
         for val in (range(start, stop + 1, step) if stop >= start else []):
+            current_count = int(arcpy.management.GetCount(self.cfg.out_general)[0])
+            if memory_tracker:
+                memory_tracker.report(f"Iteration {val}ha start", current_count)
+
             self._one_iteration_fast(val, boundary_lyr, pri_map)
             # Global dissolve after EACH iteration
             self._global_dissolve_and_refresh()
