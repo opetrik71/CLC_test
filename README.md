@@ -115,7 +115,6 @@ Outputs can be printed or exported to CSV.
 
 ## 📜 License
 This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**  
-with an additional **non-commercial use restriction**.
 
 You may use, modify, and distribute the code freely for **research, education, or
 public administration** purposes, provided that derivative works remain open source
@@ -123,7 +122,7 @@ under the same license.
 Commercial redistribution or integration into closed-source software is **not allowed**
 without prior written permission from the author.
 
-See the [LICENSE](./LICENSE) file or visit  
+See the [LICENSE/LICENSE](LICENSE/LICENSE) file or visit  
 [https://www.gnu.org/licenses/gpl-3.0.html](https://www.gnu.org/licenses/gpl-3.0.html) for details.
 ---
 
