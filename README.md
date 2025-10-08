@@ -3,12 +3,12 @@
 
 ## ⚙️ Main Scripts  
 
-### `prod/clc_gener_tool.py`
+### `prod/corine_iterator.py`
 - Ready-to-use ArcGIS **Script Tool** version  
 - Compatible with ArcGIS Pro 3.3 +  
 - GP-pane friendly messaging (`arcpy.AddMessage`, `AddWarning`, etc.)
 
-### `dev/corine_iterator_v61_claude_opus41.py`
+### `dev/clc_generalizer_dev.py`
 - Optimized / experimental version  
 - Implements performance improvements and neighbor caching
 
