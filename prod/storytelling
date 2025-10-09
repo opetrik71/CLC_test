@@ -1,0 +1,6 @@
+In the end, I won't post anything here...
+The development was done in two parts:
+- In the first part, the task was to transfer the method written in ArcGIS ModelBuilder to Python, then optimize it for ArcGIS Pro (Python3) functions.
+- The second part began when the result was acceptable, but it was running too slowly. During these optimizations, the focus was on multithreading (using Pairwise Toolset), speeding up neighborhood calculations, and using in-memory execution.
+I restarted the first part at least four times before the result resembled the reference database.
+The method this work was to optimize the code given by one AI with the other, then send it back to the first one to optimize it again, and then start over...
