@@ -7,9 +7,7 @@
 - Ready-to-use ArcGIS **Script Tool** version  
 - Compatible with ArcGIS Pro 3.3 +  
 - GP-pane friendly messaging (`arcpy.AddMessage`, `AddWarning`, etc.)
-
-### `dev/clc_generalizer_dev.py`
-- Optimized / experimental version  
+- Optimized version
 - Implements performance improvements and neighbor caching
 
 ---
@@ -33,7 +31,6 @@
 | `to_value` | Long | 23 | End MMU threshold (ha) |
 | `by_value` | Long | 5 | Increment between iterations |
 | `neighbor_mode` | Text | `"BOUNDARY_TOUCHES"` | Spatial relationship mode |
-| `keep_intermediates` | Boolean | False | Keep temporary datasets |
 
 ---
 
@@ -42,23 +39,21 @@
 1. **Prepare Input Copies**
    - Change & Revision datasets copied to memory.
    - Codes normalized (e.g., `1211/1212 → 121`).
-
+   - Ensures all polygons have valid class codes.
+     
 2. **Union + Multipart → Singlepart**
    - Combined geometry between Change and Revision.
 
-3. **Fill `NEWCODE` field**
-   - Ensures all polygons have valid class codes.
-
-4. **Iterative Generalization**
+3. **Iterative Generalization**
    - Iterates over size thresholds (3 → 23 ha).
    - Small polygons are merged with their best neighbor:
      - Prefers same code or lowest `PRI` value.
      - Uses pre-computed neighbor index (PolygonNeighbors).
 
-5. **Dissolve after each iteration**
+4. **Dissolve after each iteration**
    - Keeps geometry clean and merged.
 
-6. **Annotation**
+5. **Annotation**
    - Adds `Comment`:
      - `<25 ha` → “Smaller than MMU”
      - `<25 ha` & touches boundary → “Edge polygon”
@@ -76,9 +71,10 @@
 
 ## 🧰 Using as a Script Tool in ArcGIS Pro
 
-1. Create a new **Script Tool** in a Toolbox.
-2. Set the script path to `prod/clc_gener_tool.py`.
-3. Define parameters as:
+1. Create a new **ToolBox** in the Catalog.
+2. Create a new **Script** in this **ToolBox**
+3. Set the script path to `clc_gener_tool.py`.
+4. Define parameters as:
 
 | Index | Name | Data Type | Direction | Default |
 |-------|------|------------|------------|----------|
@@ -89,6 +85,8 @@
 | 4 | from_value | Long | Input | 3 |
 | 5 | to_value | Long | Input | 23 |
 | 6 | by_value | Long | Input | 5 |
+
+If help is needed try: https://www.youtube.com/watch?v=v5pBuvo4JTU
 
 ---
 
@@ -131,13 +129,12 @@ See the [LICENSE/LICENSE](LICENSE/LICENSE) file or visit
 | Name | Contribution |
 |------|---------------|
 | **O. Petrik** | Project lead, core algorithm design, CLC domain logic |
-| **Claude Opus 4.1** | Performance optimization (batch updates, neighbor caching) |
 | **ChatGPT (GPT-5)** | ArcGIS Pro script refactoring and optimization, toolbox integration, documentation, QA, and environment automation |
-
+| **Claude Opus 4.1** | Performance optimization (batch updates, neighbor caching) |
 
 ---
 
 ## 🧩 Notes
 - `PairwiseDissolve` used for faster topology rebuilds (fallbacks to `Dissolve` if unsupported).
-- Tested with ArcGIS Pro 3.5.3, Python 3.11 (arcpy 3.5).
+- Tested with ArcGIS Pro 3.5.3, Python 3.9
 - Optimized for both tile-level and full-country generalization workflows.
