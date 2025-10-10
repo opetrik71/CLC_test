@@ -73,8 +73,9 @@
 
 1. Create a new **ToolBox** in the Catalog.
 2. Create a new **Script** in this **ToolBox**
-3. Set the script path to `clc_gener_tool.py`.
-4. Define parameters as:
+3. Set the **Name**, **Label**, **Decription** fields in **Tool Properties/General** tab.
+4. Set the script path to `corine_iterator.py` in **Tool Properties/Execution** tab.
+5. Define parameters in **Tool Propertis/Parameters** tab as:
 
 | Index | Name | Data Type | Direction | Default |
 |-------|------|------------|------------|----------|
@@ -87,6 +88,7 @@
 | 6 | by_value | Long | Input | 5 |
 
 If help is needed try: https://www.youtube.com/watch?v=v5pBuvo4JTU
+or: https://pro.arcgis.com/en/pro-app/latest/help/analysis/geoprocessing/basics/create-a-python-script-tool.htm
 
 ---
 
@@ -106,7 +108,7 @@ Outputs can be printed or exported to CSV.
 ## ⚡ Example Timing (ArcGIS Pro 3.5.3)
 | Dataset | Polygons | Original | Optimized |
 |----------|-----------|-----------|------------|
-| 1:100.000 mapsheet | ~800 | 86 s | 50 s |
+| 1500 square-km sheet | ~800 | 86 s | 50 s |
 | country-wide full | ~50 000 | 5600 s | 703 s |
 
 ---
