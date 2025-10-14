@@ -15,9 +15,9 @@ Main Components:
 
 Typical Usage:
     >>> cfg = Config(
-    ...     input_change="path/to/change.shp",
-    ...     input_revision="path/to/revision.shp",
-    ...     out_general="path/to/output.gdb/generalized",
+    ...     input_change="path/to/gdb/change",
+    ...     input_revision="path/to/gdb/revision",
+    ...     out_general="path/to/gdb/generalized",
     ...     priority_table="path/to/join_pri.dbf"
     ... )
     >>> generalizer = CorineGeneralizer(cfg)
